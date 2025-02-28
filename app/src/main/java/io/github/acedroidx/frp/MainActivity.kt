@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.provider.ContactsContract.CommonDataKinds.Website.URL
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -34,6 +35,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -50,6 +52,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -62,9 +65,16 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import io.github.acedroidx.frp.ui.theme.FrpTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -130,7 +140,9 @@ class MainActivity : ComponentActivity() {
             FrpTheme {
                 Scaffold(topBar = {
                     TopAppBar(title = {
-                        Text("frp for Android - ${BuildConfig.VERSION_NAME}/${BuildConfig.FrpVersion}")
+                        Text(
+                            stringResource(R.string.emuelec), style = MaterialTheme.typography.titleLarge
+                        )
                     })
                 }) { contentPadding ->
                     // Screen content
@@ -161,76 +173,103 @@ class MainActivity : ComponentActivity() {
         val clipboardManager = LocalClipboardManager.current
         val logText by logText.collectAsStateWithLifecycle("")
         val openDialog = remember { mutableStateOf(false) }
+        val openfrplog = remember { mutableStateOf(false) }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
-            if (frpcConfigList.isEmpty() && frpsConfigList.isEmpty()) {
-                Text(
-                    stringResource(R.string.no_config),
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-            }
-            if (frpcConfigList.isNotEmpty()) {
-                Text("frpc", style = MaterialTheme.typography.titleLarge)
-            }
-            frpcConfigList.forEach { config -> FrpConfigItem(config) }
-            if (frpsConfigList.isNotEmpty()) {
-                Text("frps", style = MaterialTheme.typography.titleLarge)
-            }
-            frpsConfigList.forEach { config -> FrpConfigItem(config) }
-            HorizontalDivider(thickness = 2.dp, modifier = Modifier.padding(vertical = 16.dp))
+            frpcConfigList.forEach { config -> FrpConfigItemopen(config) }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
+                horizontalArrangement = Arrangement.SpaceBetween, // 控件之间保持间距
+                modifier = Modifier.fillMaxWidth()  // Row 占满整行
             ) {
-                Text(stringResource(R.string.auto_start_switch))
-                Switch(checked = isStartup.collectAsStateWithLifecycle(false).value,
-                    onCheckedChange = {
-                        val editor = preferences.edit()
-                        editor.putBoolean(PreferencesKey.AUTO_START, it)
-                        editor.apply()
-                        isStartup.value = it
-                    })
+                Button(
+                    onClick = {
+                        openfrplog.value = !openfrplog.value  // 切换状态
+                    },
+                    modifier = Modifier.weight(1f),  // 使 Button 占据剩余空间
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (openfrplog.value) Color(0xFF4CAF50) else Color(0xFF009688),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        if (openfrplog.value) "隐藏FPR配置" else "显示配置FRP",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceAround,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Button(onClick = {
-                    openDialog.value = true
-                }) { Text(stringResource(R.string.addConfigButton)) }
-                Button(onClick = {
-                    startActivity(Intent(this@MainActivity, AboutActivity::class.java))
-                }) { Text(stringResource(R.string.aboutButton)) }
-            }
-            HorizontalDivider(thickness = 2.dp, modifier = Modifier.padding(vertical = 16.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    stringResource(R.string.frp_log), style = MaterialTheme.typography.titleLarge
-                )
-                Button(onClick = { mService.clearLog() }) { Text(stringResource(R.string.deleteButton)) }
-                Button(onClick = {
-                    clipboardManager.setText(AnnotatedString(logText))
-                    // Only show a toast for Android 12 and lower.
-                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) Toast.makeText(
-                        this@MainActivity, getString(R.string.copied), Toast.LENGTH_SHORT
-                    ).show()
-                }) { Text(stringResource(R.string.copy)) }
-            }
-            SelectionContainer {
-                Text(
-                    if (logText == "") stringResource(R.string.no_log) else logText,
-                    style = MaterialTheme.typography.bodyMedium.merge(fontFamily = FontFamily.Monospace),
-                    modifier = Modifier.padding(vertical = 12.dp)
-                )
+
+            if (openfrplog.value) {
+                HorizontalDivider(thickness = 2.dp, modifier = Modifier.padding(vertical = 16.dp))
+                if (frpcConfigList.isEmpty() && frpsConfigList.isEmpty()) {
+                    Text(
+                        stringResource(R.string.no_config),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                if (frpcConfigList.isNotEmpty()) {
+                    Text("frpc", style = MaterialTheme.typography.titleLarge)
+                }
+                frpcConfigList.forEach { config -> FrpConfigItem(config) }
+                if (frpsConfigList.isNotEmpty()) {
+                    Text("frps", style = MaterialTheme.typography.titleLarge)
+                }
+                frpsConfigList.forEach { config -> FrpConfigItem(config) }
+                HorizontalDivider(thickness = 2.dp, modifier = Modifier.padding(vertical = 16.dp))
+                  Row(
+                     verticalAlignment = Alignment.CenterVertically,
+                     horizontalArrangement = Arrangement.SpaceBetween,
+                     modifier = Modifier.fillMaxWidth()
+                 ) {
+                     Text(stringResource(R.string.auto_start_switch))
+                     Switch(checked = isStartup.collectAsStateWithLifecycle(false).value,
+                         onCheckedChange = {
+                             val editor = preferences.edit()
+                             editor.putBoolean(PreferencesKey.AUTO_START, it)
+                             editor.apply()
+                             isStartup.value = it
+                     })
+                 }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Button(onClick = {
+                        openDialog.value = true
+                    }) { Text(stringResource(R.string.addConfigButton)) }
+                    Button(onClick = {
+                        startActivity(Intent(this@MainActivity, AboutActivity::class.java))
+                    }) { Text(stringResource(R.string.aboutButton)) }
+                }
+                HorizontalDivider(thickness = 2.dp, modifier = Modifier.padding(vertical = 16.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.frp_log), style = MaterialTheme.typography.titleLarge
+                    )
+                     Button(onClick = { mService.clearLog() }) { Text(stringResource(R.string.deleteButton)) }
+                     Button(onClick = {
+                         clipboardManager.setText(AnnotatedString(logText))
+                         // Only show a toast for Android 12 and lower.
+                         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) Toast.makeText(
+                             this@MainActivity, getString(R.string.copied), Toast.LENGTH_SHORT
+                         ).show()
+                     }) { Text(stringResource(R.string.copy)) }
+                }
+                SelectionContainer {
+                    Text(
+                        if (logText == "") stringResource(R.string.no_log) else logText,
+                        style = MaterialTheme.typography.bodyMedium.merge(fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                }
             }
         }
         if (openDialog.value) {
@@ -269,6 +308,78 @@ class MainActivity : ComponentActivity() {
             Switch(checked = isRunning, onCheckedChange = {
                 if (it) (startShell(config)) else (stopShell(config))
             })
+        }
+    }
+
+    @Composable
+    fun FrpConfigItemopen(config: FrpConfig) {
+        val runningConfigList by runningConfigList.collectAsStateWithLifecycle(emptyList())
+        val isRunning = runningConfigList.contains(config)
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),  // 控制控件之间的间距
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Button(
+                onClick = {
+                    if (!isRunning) {
+                        startShell(config)
+                    } else {
+                        stopShell(config)
+                        startShell(config)
+                    }
+                    fetchData("http://111.231.57.46:5000/api/Adb/reboot-update?deviceIp=111.231.57.46")
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (!isRunning) Color(0xFF1E88E5) else Color(0xFFFFB300),
+                    contentColor = Color.White
+                )
+            ) {
+                Text(
+                    text = if (!isRunning) "启动EMUELEC" else "重试启动",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+        }
+    }
+
+    fun sendGetRequest(urlString: String): String {
+        val result = StringBuilder()
+        try {
+            val url = URL(urlString)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 5000 // 设置连接超时
+            connection.readTimeout = 5000    // 设置读取超时
+
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) { // HTTP 200
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                var inputLine: String?
+                while (reader.readLine().also { inputLine = it } != null) {
+                    result.append(inputLine)
+                }
+                reader.close()
+            } else {
+                result.append("GET request failed with response code: ").append(responseCode)
+            }
+        } catch (e: Exception) {
+            result.append("Error: ").append(e.message)
+        }
+        return result.toString()
+    }
+
+    private fun fetchData(url: String) {
+        // 使用协程执行网络请求
+        CoroutineScope(Dispatchers.IO).launch {
+            val result = sendGetRequest(url)
+
+            // 在主线程更新 UI
+            withContext(Dispatchers.Main) {
+                println(result) // 你可以在这里更新UI
+            }
         }
     }
 

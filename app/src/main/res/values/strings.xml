@@ -1,9 +1,11 @@
 <resources>
-    <string name="app_name" translatable="false">frp</string>
-    <string name="frp_for_android" translatable="false">frp for Android</string>
+    <string name="app_name" translatable="false">EMUELEC工具箱</string>
+    <string name="frp_for_android" translatable="false">EMUELEC工具箱</string>
     <string name="auto_start_switch">Startup at Boot</string>
     <string name="addConfigButton">Add Config</string>
     <string name="aboutButton">About</string>
+    <string name="emuelec">EMUELEC Tool</string>
+    <string name="reboot">reboot</string>
     <string name="frp_log">frp Log</string>
     <string name="deleteButton">Clear</string>
     <string name="no_log">No Log</string>

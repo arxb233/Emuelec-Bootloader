@@ -5,6 +5,8 @@
     <string name="aboutButton">关于</string>
     <string name="frp_log">frp日志</string>
     <string name="deleteButton">清除</string>
+    <string name="emuelec">EMUELEC工具箱</string>
+    <string name="reboot">启动EMUELEC</string>
     <string name="no_log">无日志</string>
     <string name="saveConfigButton">保存</string>
     <string name="dontSaveConfigButton">不保存</string>
