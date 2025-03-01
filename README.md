@@ -1,30 +1,24 @@
+# 项目背景
+Emuelec是基于amlogic晶晨芯片制作的游戏系统。
+主要用于双系统装在电视盒子上。由于游戏内容较大需要外接存储设备。
+但是外接存储设备在异常拔出情况下会无法自动进入外接系统设备。
+因此需要在电视盒子主系统安装tf卡引导程序，来进入外接存储设备。
+但是tf卡引导程序由于安卓权限问题，需要root才能使用。
+
+# 项目逻辑
+因此通过该项目以实现非root进行tf卡引导程序功能。
+思路很简单：电视盒子的开发者模式无需验证码，只要开一次每次开机都会进入adb调试模式
+那么就可以通过调用安卓frp将本地的adb端口映射到windows的服务器上
+再通过windows调用adb指令来完成tf卡引导功能。
+本项目为了快速实现功能，通过拉取frp-Android项目，在项目上二开完成功能
+
 # frp-Android
 A frp client for Android  
 一个Android的frpc客户端
 
-简体中文 | [English](README_en.md)
-
-<div style="display:inline-block">
-<img src="./image/image1.png" alt="image1.png" width="200">
-<img src="./image/image2.png" alt="image2.png" width="200">
-</div>
-
 ## 编译方法
 
 如果您想自定义frp内核，可以通过Github Actions或通过Android Studio编译
-
-### 通过Github Actions编译
-
-1. 将您的apk签名密钥文件转为base64，以下为Linux示例
-```shell
-base64 -w 0 keystore.jks > keystore.jks.base64
-```
-2. fork本项目
-3. 转到Github项目的此页面：Settings > Secrets and variables > Actions > Repository secrets
-4. 添加以下四个环境变量：
-```KEY_ALIAS``` ```KEY_PASSWORD``` ```STORE_FILE``` ```STORE_PASSWORD```  
-其中```STORE_FILE```的内容为步骤1的base64，其他环境变量内容请根据您的密钥文件自行填写
-5. Push提交自动触发编译或在Actions页面手动触发
 
 ### 通过Android Studio编译
 
